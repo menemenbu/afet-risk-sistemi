@@ -1,0 +1,2 @@
+# afet-risk-sistemi
+
