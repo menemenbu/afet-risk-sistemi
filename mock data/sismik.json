@@ -1,0 +1,46 @@
+[
+  {
+    "sensor_id": "sismik_01",
+    "sensor_tipi": "sismik",
+    "konum": { "lat": 41.6771, "lon": 26.5553 },
+    "zaman_damgasi": "2026-08-04T14:23:20Z",
+    "guven_skoru": 0.85,
+    "veri": {
+      "titresim_siddeti": 3.2,
+      "sure_sn": 8
+    }
+  },
+  {
+    "sensor_id": "sismik_01",
+    "sensor_tipi": "sismik",
+    "konum": { "lat": 41.6794, "lon": 26.5544 },
+    "zaman_damgasi": "2026-08-04T14:24:20Z",
+    "guven_skoru": 0.45,
+    "veri": {
+      "titresim_siddeti": 1.1,
+      "sure_sn": 3
+    }
+  },
+  {
+    "sensor_id": "sismik_02",
+    "sensor_tipi": "sismik",
+    "konum": { "lat": 41.6805, "lon": 26.5526 },
+    "zaman_damgasi": "2026-08-04T14:26:20Z",
+    "guven_skoru": 0.20,
+    "veri": {
+      "titresim_siddeti": 0.4,
+      "sure_sn": 1
+    }
+  },
+  {
+    "sensor_id": "sismik_02",
+    "sensor_tipi": "sismik",
+    "konum": { "lat": 41.6772, "lon": 26.5556 },
+    "zaman_damgasi": "2026-08-04T14:29:50Z",
+    "guven_skoru": 0.92,
+    "veri": {
+      "titresim_siddeti": 4.6,
+      "sure_sn": 12
+    }
+  }
+]

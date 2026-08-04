@@ -1,0 +1,46 @@
+[
+  {
+    "sensor_id": "rf_frekans_01",
+    "sensor_tipi": "rf",
+    "konum": { "lat": 41.6770, "lon": 26.5554 },
+    "zaman_damgasi": "2026-08-04T14:23:15Z",
+    "guven_skoru": 0.65,
+    "veri": {
+      "sinyal_gucu": -65,
+      "cihaz_tespit": true
+    }
+  },
+  {
+    "sensor_id": "rf_frekans_01",
+    "sensor_tipi": "rf",
+    "konum": { "lat": 41.6792, "lon": 26.5542 },
+    "zaman_damgasi": "2026-08-04T14:24:15Z",
+    "guven_skoru": 0.30,
+    "veri": {
+      "sinyal_gucu": -95,
+      "cihaz_tespit": false
+    }
+  },
+  {
+    "sensor_id": "rf_frekans_02",
+    "sensor_tipi": "rf",
+    "konum": { "lat": 41.6803, "lon": 26.5524 },
+    "zaman_damgasi": "2026-08-04T14:26:15Z",
+    "guven_skoru": 0.15,
+    "veri": {
+      "sinyal_gucu": -102,
+      "cihaz_tespit": false
+    }
+  },
+  {
+    "sensor_id": "rf_frekans_02",
+    "sensor_tipi": "rf",
+    "konum": { "lat": 41.6772, "lon": 26.5556 },
+    "zaman_damgasi": "2026-08-04T14:30:45Z",
+    "guven_skoru": 0.78,
+    "veri": {
+      "sinyal_gucu": -58,
+      "cihaz_tespit": true
+    }
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "sensor_id": "ses_sensoru_01",
+    "sensor_tipi": "ses",
+    "konum": { "lat": 41.6775, "lon": 26.5559 },
+    "zaman_damgasi": "2026-08-04T14:23:05Z",
+    "guven_skoru": 0.75,
+    "veri": {
+      "desibel": 42,
+      "insan_sesi_tespit": true
+    }
+  },
+  {
+    "sensor_id": "ses_sensoru_01",
+    "sensor_tipi": "ses",
+    "konum": { "lat": 41.6793, "lon": 26.5543 },
+    "zaman_damgasi": "2026-08-04T14:24:05Z",
+    "guven_skoru": 0.40,
+    "veri": {
+      "desibel": 18,
+      "insan_sesi_tespit": false
+    }
+  },
+  {
+    "sensor_id": "ses_sensoru_02",
+    "sensor_tipi": "ses",
+    "konum": { "lat": 41.6804, "lon": 26.5525 },
+    "zaman_damgasi": "2026-08-04T14:26:05Z",
+    "guven_skoru": 0.20,
+    "veri": {
+      "desibel": 12,
+      "insan_sesi_tespit": false
+    }
+  },
+  {
+    "sensor_id": "ses_sensoru_02",
+    "sensor_tipi": "ses",
+    "konum": { "lat": 41.6772, "lon": 26.5556 },
+    "zaman_damgasi": "2026-08-04T14:31:05Z",
+    "guven_skoru": 0.80,
+    "veri": {
+      "desibel": 51,
+      "insan_sesi_tespit": true
+    }
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "sensor_id": "termal_drone_01",
+    "sensor_tipi": "termal",
+    "konum": { "lat": 41.6772, "lon": 26.5556 },
+    "zaman_damgasi": "2026-08-04T14:23:00Z",
+    "guven_skoru": 0.90,
+    "veri": {
+      "sicaklik_max": 36.8,
+      "sicaklik_ortalama": 22.0
+    }
+  },
+  {
+    "sensor_id": "termal_drone_01",
+    "sensor_tipi": "termal",
+    "konum": { "lat": 41.6790, "lon": 26.5540 },
+    "zaman_damgasi": "2026-08-04T14:25:00Z",
+    "guven_skoru": 0.55,
+    "veri": {
+      "sicaklik_max": 29.4,
+      "sicaklik_ortalama": 24.0
+    }
+  },
+  {
+    "sensor_id": "termal_drone_02",
+    "sensor_tipi": "termal",
+    "konum": { "lat": 41.6801, "lon": 26.5522 },
+    "zaman_damgasi": "2026-08-04T14:27:00Z",
+    "guven_skoru": 0.30,
+    "veri": {
+      "sicaklik_max": 24.1,
+      "sicaklik_ortalama": 21.5
+    }
+  },
+  {
+    "sensor_id": "termal_drone_02",
+    "sensor_tipi": "termal",
+    "konum": { "lat": 41.6772, "lon": 26.5556 },
+    "zaman_damgasi": "2026-08-04T14:30:00Z",
+    "guven_skoru": 0.85,
+    "veri": {
+      "sicaklik_max": 37.2,
+      "sicaklik_ortalama": 22.3
+    }
+  }
+]

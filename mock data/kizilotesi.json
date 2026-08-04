@@ -1,0 +1,46 @@
+[
+  {
+    "sensor_id": "kizilotesi_01",
+    "sensor_tipi": "kizilotesi",
+    "konum": { "lat": 41.6773, "lon": 26.5557 },
+    "zaman_damgasi": "2026-08-04T14:23:10Z",
+    "guven_skoru": 0.80,
+    "veri": {
+      "sicaklik": 35.2,
+      "hareket_tespit": true
+    }
+  },
+  {
+    "sensor_id": "kizilotesi_01",
+    "sensor_tipi": "kizilotesi",
+    "konum": { "lat": 41.6791, "lon": 26.5541 },
+    "zaman_damgasi": "2026-08-04T14:24:10Z",
+    "guven_skoru": 0.35,
+    "veri": {
+      "sicaklik": 26.0,
+      "hareket_tespit": false
+    }
+  },
+  {
+    "sensor_id": "kizilotesi_02",
+    "sensor_tipi": "kizilotesi",
+    "konum": { "lat": 41.6802, "lon": 26.5523 },
+    "zaman_damgasi": "2026-08-04T14:26:10Z",
+    "guven_skoru": 0.25,
+    "veri": {
+      "sicaklik": 23.4,
+      "hareket_tespit": false
+    }
+  },
+  {
+    "sensor_id": "kizilotesi_02",
+    "sensor_tipi": "kizilotesi",
+    "konum": { "lat": 41.6772, "lon": 26.5556 },
+    "zaman_damgasi": "2026-08-04T14:30:30Z",
+    "guven_skoru": 0.88,
+    "veri": {
+      "sicaklik": 36.5,
+      "hareket_tespit": true
+    }
+  }
+]
