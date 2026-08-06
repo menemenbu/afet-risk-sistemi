@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: afet-mqtt-broker
+    ports:
+      - "1883:1883"   # MQTT standart portu
+      - "9001:9001"   # WebSocket portu (ileride harita/panel tarayıcıdan bağlanmak isterse)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped

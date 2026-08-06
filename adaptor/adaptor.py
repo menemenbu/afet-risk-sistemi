@@ -2,17 +2,23 @@
 Adaptör Modülü
 --------------
 Bu modül, her sensörden gelen (şimdilik mock/sabit) veriyi okur,
-ortak veri şemasına uygunluğunu doğrular ve Merkezi Gateway'e
-gönderime hazır hale getirir.
+ortak veri şemasına uygunluğunu doğrular ve MQTT broker üzerinden
+Merkezi Gateway'e gönderir.
 
-Şu an MQTT bağlantısı henüz kurulmadığı için `gateway_gonder()`
-fonksiyonu bir "stub" (yer tutucu) - sadece konsola yazdırır.
-İleride MQTT Broker aşamasında gerçek gönderim koduna çevrilecek.
+Gönderim, her sensör tipi için ayrı bir topic'e (örn. "sensor/termal")
+yapılır. Gateway bu topic'lere abone olarak (subscribe) veriyi toplar.
 """
 
 import json
 import os
 from datetime import datetime
+
+import paho.mqtt.client as mqtt
+
+# --- MQTT Ayarları ---
+MQTT_HOST = "localhost"
+MQTT_PORT = 1883
+MQTT_TOPIC_ONEKI = "sensor"   # topic'ler: sensor/termal, sensor/ses, vb.
 
 # Ortak şemada zorunlu olan üst seviye alanlar
 ZORUNLU_ALANLAR = ["sensor_id", "sensor_tipi", "konum", "zaman_damgasi", "guven_skoru", "veri"]
@@ -71,21 +77,35 @@ def veri_dogrula(kayit: dict) -> tuple[bool, str]:
     return True, ""
 
 
-def gateway_gonder(kayit: dict):
+def mqtt_baglan() -> mqtt.Client:
     """
-    Doğrulanmış veriyi Gateway'e gönderir.
-    ŞİMDİLİK: Sadece konsola yazdırır (stub).
-    SONRA: MQTT publish burada yapılacak, örn:
-        mqtt_client.publish("sensor/veri", json.dumps(kayit))
+    Broker'a bağlanır ve bağlı MQTT client nesnesini döner.
     """
-    print(f"[GÖNDERİLDİ] {kayit['sensor_id']} ({kayit['sensor_tipi']}) "
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.connect(MQTT_HOST, MQTT_PORT)
+    return client
+
+
+def gateway_gonder(client: mqtt.Client, kayit: dict):
+    """
+    Doğrulanmış veriyi, sensör tipine göre ilgili MQTT topic'ine yayınlar.
+    Örn: sensor_tipi = "termal" -> topic = "sensor/termal"
+    """
+    topic = f"{MQTT_TOPIC_ONEKI}/{kayit['sensor_tipi']}"
+    mesaj = json.dumps(kayit, ensure_ascii=False)
+
+    sonuc = client.publish(topic, mesaj, qos=1)
+    sonuc.wait_for_publish()
+
+    print(f"[GÖNDERİLDİ -> {topic}] {kayit['sensor_id']} "
           f"-> güven: {kayit['guven_skoru']}, zaman: {kayit['zaman_damgasi']}")
 
 
-def dosya_isle(dosya_yolu: str):
+def dosya_isle(client: mqtt.Client, dosya_yolu: str):
     """
     Bir mock veri dosyasını okur, her kaydı doğrular ve
-    geçerli olanları Gateway'e gönderir. Geçersiz kayıtları raporlar.
+    geçerli olanları Gateway'e (MQTT üzerinden) gönderir.
+    Geçersiz kayıtları raporlar.
     """
     with open(dosya_yolu, "r", encoding="utf-8") as f:
         kayitlar = json.load(f)
@@ -95,23 +115,30 @@ def dosya_isle(dosya_yolu: str):
     for i, kayit in enumerate(kayitlar, start=1):
         gecerli, hata = veri_dogrula(kayit)
         if gecerli:
-            gateway_gonder(kayit)
+            gateway_gonder(client, kayit)
         else:
             print(f"[HATA] Kayıt {i}: {hata}")
 
 
-def tum_mock_verileri_isle(mock_klasoru: str):
+def tum_mock_verileri_isle(client: mqtt.Client, mock_klasoru: str):
     """
-    mock-data klasöründeki tüm .json dosyalarını sırayla işler.
+    mock_data klasöründeki tüm .json dosyalarını sırayla işler.
     """
     for dosya_adi in sorted(os.listdir(mock_klasoru)):
         if dosya_adi.endswith(".json"):
-            dosya_isle(os.path.join(mock_klasoru, dosya_adi))
+            dosya_isle(client, os.path.join(mock_klasoru, dosya_adi))
 
 
 if __name__ == "__main__":
-    # Bu script'in bulunduğu klasöre göre mock-data klasörünü bul
+    # Bu script'in bulunduğu klasöre göre mock_data klasörünü bul
     mevcut_klasor = os.path.dirname(os.path.abspath(__file__))
     mock_klasoru = os.path.join(mevcut_klasor, "..", "mock_data")
 
-    tum_mock_verileri_isle(mock_klasoru)
+    mqtt_client = mqtt_baglan()
+    mqtt_client.loop_start()
+
+    tum_mock_verileri_isle(mqtt_client, mock_klasoru)
+
+    mqtt_client.loop_stop()
+    mqtt_client.disconnect()
+    print("\nTüm veriler gönderildi, MQTT bağlantısı kapatıldı.")
