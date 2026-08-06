@@ -112,6 +112,6 @@ def tum_mock_verileri_isle(mock_klasoru: str):
 if __name__ == "__main__":
     # Bu script'in bulunduğu klasöre göre mock-data klasörünü bul
     mevcut_klasor = os.path.dirname(os.path.abspath(__file__))
-    mock_klasoru = os.path.join(mevcut_klasor, "..", "mock-data")
+    mock_klasoru = os.path.join(mevcut_klasor, "..", "mock_data")
 
     tum_mock_verileri_isle(mock_klasoru)
