@@ -1,0 +1,79 @@
+"""
+WebSocket Sunucusu
+------------------
+Gateway'in ürettiği bölge verilerini bağlı istemcilere (ileride
+tarayıcıdaki Canlı Harita) gerçek zamanlı olarak yayınlar (broadcast).
+
+Gateway, MQTT ile senkron (loop_forever) çalıştığı için, WebSocket
+sunucusu ayrı bir thread'de kendi asyncio event loop'unu çalıştırır.
+Gateway tarafında sadece `yayinla(mesaj)` fonksiyonu çağrılır -
+senkron bir fonksiyon gibi kullanılır, arka planda mesajı asyncio
+loop'una thread-safe şekilde iletir.
+"""
+
+import asyncio
+import json
+import threading
+
+import websockets
+
+WS_HOST = "localhost"
+WS_PORT = 8765
+
+_baglantilar = set()
+_loop = None  # WebSocket sunucusunun çalıştığı asyncio event loop
+
+
+async def _handler(websocket):
+    """Yeni bir istemci bağlandığında/ayrıldığında listeyi günceller."""
+    _baglantilar.add(websocket)
+    print(f"[WebSocket] Yeni istemci bağlandı. Toplam: {len(_baglantilar)}")
+    try:
+        async for _ in websocket:
+            pass  # şimdilik istemciden gelen mesajları dikkate almıyoruz
+    finally:
+        _baglantilar.discard(websocket)
+        print(f"[WebSocket] İstemci ayrıldı. Toplam: {len(_baglantilar)}")
+
+
+async def _yayinla_async(mesaj: dict):
+    if not _baglantilar:
+        return
+    veri = json.dumps(mesaj, ensure_ascii=False)
+    for baglanti in list(_baglantilar):
+        try:
+            await baglanti.send(veri)
+        except websockets.exceptions.ConnectionClosed:
+            _baglantilar.discard(baglanti)
+
+
+def yayinla(mesaj: dict):
+    """
+    Gateway tarafından çağrılacak senkron fonksiyon.
+    Mesajı tüm bağlı WebSocket istemcilerine gönderir.
+    """
+    if _loop is None:
+        return  # sunucu henüz hazır değil, mesaj atlanır
+    asyncio.run_coroutine_threadsafe(_yayinla_async(mesaj), _loop)
+
+
+def _sunucuyu_calistir():
+    global _loop
+    _loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_loop)
+
+    async def _baslat():
+        async with websockets.serve(_handler, WS_HOST, WS_PORT):
+            print(f"[WebSocket] Sunucu çalışıyor: ws://{WS_HOST}:{WS_PORT}")
+            await asyncio.Future()  # sonsuza kadar açık kal
+
+    _loop.run_until_complete(_baslat())
+
+
+def baslat():
+    """
+    WebSocket sunucusunu ayrı bir arka plan thread'inde başlatır.
+    Gateway'in ana MQTT döngüsünü bloklamaz.
+    """
+    thread = threading.Thread(target=_sunucuyu_calistir, daemon=True)
+    thread.start()

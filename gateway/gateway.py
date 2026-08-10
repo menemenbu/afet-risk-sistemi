@@ -30,8 +30,10 @@ import paho.mqtt.client as mqtt
 _mevcut_klasor = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_mevcut_klasor, "..", "db"))
 sys.path.insert(0, os.path.join(_mevcut_klasor, "..", "ai_engine"))
+sys.path.insert(0, os.path.join(_mevcut_klasor, "..", "websocket"))
 from database import Veritabani
 from risk_motoru import bolge_risk_hesapla
+import ws_server
 
 # --- MQTT Ayarları ---
 MQTT_HOST = "localhost"
@@ -213,6 +215,24 @@ class BolgeHavuzu:
                 for satir in bolge["aciklama"]:
                     print(f"    - {satir}")
 
+        # Güncel bölge durumunu WebSocket üzerinden bağlı istemcilere yayınla
+        # (harita/panel bu mesajı dinleyip anlık güncellenecek)
+        ws_server.yayinla({
+            "tip": "bolge_guncelleme",
+            "toplam_ham_kayit": len(self.kayitlar),
+            "bolgeler": [
+                {
+                    "konum": bolge["merkez_konum"],
+                    "sensor_tipleri": bolge["sensor_tipleri"],
+                    "kayit_sayisi": bolge["kayit_sayisi"],
+                    "birlesik_guven_skoru": bolge["birlesik_guven_skoru"],
+                    "oncelik_skoru": bolge["oncelik_skoru"],
+                    "yapisal_risk_skoru": bolge["yapisal_risk_skoru"],
+                }
+                for bolge in bolgeler
+            ],
+        })
+
 
 # --- MQTT Callback Fonksiyonları ---
 
@@ -245,6 +265,9 @@ def gateway_baslat():
     vt = Veritabani(DB_DOSYA_YOLU)
     havuz = BolgeHavuzu(veritabani=vt)
     print(f"Veritabanı hazır: {DB_DOSYA_YOLU}")
+
+    ws_server.baslat()
+    time.sleep(0.5)  # WebSocket sunucusunun thread'de başlaması için kısa bekleme
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = on_connect
