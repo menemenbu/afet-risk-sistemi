@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Afet Risk Sistemi — Komuta Paneli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #0b0f14;
+    --bg-1: #121822;
+    --bg-2: #1a2230;
+    --bg-3: #212b3a;
+    --border: #263142;
+    --text-hi: #e8edf4;
+    --text-mid: #9aa8bd;
+    --text-low: #5d6b80;
+    --accent: #3fa9f5;
+    --risk-low: #3ecf6e;
+    --risk-mid: #f0b429;
+    --risk-high: #e5484d;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    background: var(--bg-0);
+    font-family: var(--font-sans);
+    color: var(--text-hi);
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 28px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .baslik { display: flex; align-items: baseline; gap: 10px; }
+  .baslik h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .baslik .alt {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-low);
+    letter-spacing: 0.05em;
+  }
+
+  #baglanti-durumu {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-mid);
+  }
+  #baglanti-noktasi {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-low);
+    transition: background 0.3s;
+  }
+  #baglanti-noktasi.bagli { background: var(--risk-low); box-shadow: 0 0 8px var(--risk-low); }
+  #baglanti-noktasi.koptu { background: var(--risk-high); box-shadow: 0 0 8px var(--risk-high); }
+
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 28px 60px;
+  }
+
+  /* --- Özet Kartları --- */
+  #ozet {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .ozet-kart {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .ozet-kart .deger {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 700;
+  }
+  .ozet-kart .etiket {
+    font-size: 11px;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 4px;
+  }
+
+  /* --- Filtreler --- */
+  #filtreler {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .filtre-btn {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    color: var(--text-mid);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 8px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filtre-btn:hover { border-color: var(--accent); color: var(--text-hi); }
+  .filtre-btn.aktif {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #08131f;
+    font-weight: 600;
+  }
+
+  /* --- Bölge Tablosu --- */
+  #tablo-govde { display: flex; flex-direction: column; gap: 10px; }
+
+  .bolge-satiri {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--risk-low);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: grid;
+    grid-template-columns: 90px 1fr 140px 140px 200px;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .oncelik-hucre { text-align: center; }
+  .oncelik-hucre .yuzde {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .oncelik-hucre .etiket {
+    font-size: 9px;
+    color: var(--text-low);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .bilgi-hucre .konum {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-low);
+    margin-bottom: 4px;
+  }
+  .bilgi-hucre .sensorler {
+    font-size: 13px;
+    color: var(--text-hi);
+  }
+
+  .metrik-hucre {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-mid);
+    line-height: 1.6;
+  }
+  .metrik-hucre b { color: var(--text-hi); }
+
+  .durum-rozeti {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+  .durum-beklemede { background: #5d6b8022; color: var(--text-mid); }
+  .durum-ekip_gonderildi { background: #f0b42922; color: var(--risk-mid); }
+  .durum-kontrol_edildi { background: #3ecf6e22; color: var(--risk-low); }
+
+  .eylem-hucre { display: flex; flex-direction: column; gap: 6px; }
+  .eylem-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-mid);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .eylem-btn:hover { border-color: var(--accent); color: var(--text-hi); }
+  .eylem-btn.aktif-durum {
+    border-color: currentColor;
+    font-weight: 600;
+  }
+
+  #bos-durum {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-low);
+    font-size: 13px;
+    line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="baslik">
+    <h1>Afet Risk Sistemi</h1>
+    <span class="alt">KOMUTA PANELİ</span>
+  </div>
+  <div id="baglanti-durumu">
+    <div id="baglanti-noktasi"></div>
+    <span id="baglanti-metni">BAĞLANIYOR...</span>
+  </div>
+</header>
+
+<main>
+  <div id="ozet">
+    <div class="ozet-kart">
+      <div class="deger" id="ozet-toplam">0</div>
+      <div class="etiket">Toplam Bölge</div>
+    </div>
+    <div class="ozet-kart">
+      <div class="deger" id="ozet-yuksek" style="color: var(--risk-high)">0</div>
+      <div class="etiket">Yüksek Öncelik</div>
+    </div>
+    <div class="ozet-kart">
+      <div class="deger" id="ozet-beklemede" style="color: var(--text-mid)">0</div>
+      <div class="etiket">Beklemede</div>
+    </div>
+    <div class="ozet-kart">
+      <div class="deger" id="ozet-kontrol" style="color: var(--risk-low)">0</div>
+      <div class="etiket">Kontrol Edildi</div>
+    </div>
+  </div>
+
+  <div id="filtreler">
+    <button class="filtre-btn aktif" data-filtre="hepsi">TÜMÜ</button>
+    <button class="filtre-btn" data-filtre="beklemede">BEKLEMEDE</button>
+    <button class="filtre-btn" data-filtre="ekip_gonderildi">EKİP GÖNDERİLDİ</button>
+    <button class="filtre-btn" data-filtre="kontrol_edildi">KONTROL EDİLDİ</button>
+    <button class="filtre-btn" data-filtre="yuksek_oncelik">SADECE YÜKSEK ÖNCELİK (≥70%)</button>
+  </div>
+
+  <div id="tablo-govde">
+    <div id="bos-durum">
+      Henüz bölge verisi yok.<br>
+      Gateway ve adaptör/simülatör çalıştığında bölgeler burada listelenecek.
+    </div>
+  </div>
+</main>
+
+<script>
+  const WS_URL = "ws://localhost:8765";
+  let ws = null;
+  let mevcutBolgeler = [];
+  let aktifFiltre = "hepsi";
+
+  const DURUM_ETIKETLERI = {
+    beklemede: "Beklemede",
+    ekip_gonderildi: "Ekip Gönderildi",
+    kontrol_edildi: "Kontrol Edildi",
+  };
+
+  function riskRengi(skor) {
+    if (skor >= 0.7) return '#e5484d';
+    if (skor >= 0.3) return '#f0b429';
+    return '#3ecf6e';
+  }
+
+  function baglantiDurumGuncelle(durum) {
+    const nokta = document.getElementById('baglanti-noktasi');
+    const metin = document.getElementById('baglanti-metni');
+    nokta.className = '';
+    if (durum === 'bagli') { nokta.classList.add('bagli'); metin.textContent = 'BAĞLI'; }
+    else if (durum === 'koptu') { nokta.classList.add('koptu'); metin.textContent = 'BAĞLANTI YOK'; }
+    else { metin.textContent = 'BAĞLANIYOR...'; }
+  }
+
+  function ozetGuncelle(bolgeler) {
+    document.getElementById('ozet-toplam').textContent = bolgeler.length;
+    document.getElementById('ozet-yuksek').textContent =
+      bolgeler.filter(b => b.oncelik_skoru >= 0.7).length;
+    document.getElementById('ozet-beklemede').textContent =
+      bolgeler.filter(b => b.durum === 'beklemede').length;
+    document.getElementById('ozet-kontrol').textContent =
+      bolgeler.filter(b => b.durum === 'kontrol_edildi').length;
+  }
+
+  function bolgeleriFiltrele(bolgeler) {
+    if (aktifFiltre === 'hepsi') return bolgeler;
+    if (aktifFiltre === 'yuksek_oncelik') return bolgeler.filter(b => b.oncelik_skoru >= 0.7);
+    return bolgeler.filter(b => b.durum === aktifFiltre);
+  }
+
+  function durumGonder(konum, yeniDurum) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ tip: "durum_guncelleme", konum, durum: yeniDurum }));
+  }
+
+  function tabloyuCiz() {
+    const govde = document.getElementById('tablo-govde');
+    const gosterilecekler = bolgeleriFiltrele(mevcutBolgeler)
+      .slice()
+      .sort((a, b) => b.oncelik_skoru - a.oncelik_skoru);
+
+    if (gosterilecekler.length === 0) {
+      govde.innerHTML = `<div id="bos-durum">Bu filtreye uyan bölge yok.</div>`;
+      return;
+    }
+
+    govde.innerHTML = gosterilecekler.map((bolge) => {
+      const renk = riskRengi(bolge.oncelik_skoru);
+      const konumStr = `${bolge.konum.lat.toFixed(4)}, ${bolge.konum.lon.toFixed(4)}`;
+      const konumJson = JSON.stringify(bolge.konum).replace(/"/g, '&quot;');
+
+      const eylemButonlari = Object.entries(DURUM_ETIKETLERI).map(([anahtar, etiket]) => `
+        <button class="eylem-btn ${bolge.durum === anahtar ? 'aktif-durum' : ''}"
+                style="${bolge.durum === anahtar ? `color:${renk}` : ''}"
+                onclick='durumGonder(${konumJson}, "${anahtar}")'>
+          ${etiket}
+        </button>
+      `).join('');
+
+      return `
+        <div class="bolge-satiri" style="border-left-color:${renk}">
+          <div class="oncelik-hucre">
+            <div class="yuzde" style="color:${renk}">${(bolge.oncelik_skoru * 100).toFixed(0)}%</div>
+            <div class="etiket">öncelik</div>
+          </div>
+          <div class="bilgi-hucre">
+            <div class="konum">${konumStr}</div>
+            <div class="sensorler">${bolge.sensor_tipleri.join(', ')}</div>
+          </div>
+          <div class="metrik-hucre">
+            Yapısal Risk: <b>${(bolge.yapisal_risk_skoru * 100).toFixed(0)}%</b><br>
+            Güven: <b>${(bolge.birlesik_guven_skoru * 100).toFixed(0)}%</b><br>
+            Kayıt: <b>${bolge.kayit_sayisi}</b>
+          </div>
+          <div class="metrik-hucre">
+            <span class="durum-rozeti durum-${bolge.durum}">${DURUM_ETIKETLERI[bolge.durum]}</span>
+          </div>
+          <div class="eylem-hucre">${eylemButonlari}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  document.querySelectorAll('.filtre-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filtre-btn').forEach(b => b.classList.remove('aktif'));
+      btn.classList.add('aktif');
+      aktifFiltre = btn.dataset.filtre;
+      tabloyuCiz();
+    });
+  });
+
+  function baglantiKur() {
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => baglantiDurumGuncelle('bagli');
+
+    ws.onmessage = (event) => {
+      const mesaj = JSON.parse(event.data);
+      if (mesaj.tip === 'bolge_guncelleme') {
+        mevcutBolgeler = mesaj.bolgeler;
+        ozetGuncelle(mevcutBolgeler);
+        tabloyuCiz();
+      }
+    };
+
+    ws.onclose = () => {
+      baglantiDurumGuncelle('koptu');
+      setTimeout(baglantiKur, 2000);
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  baglantiKur();
+</script>
+
+</body>
+</html>

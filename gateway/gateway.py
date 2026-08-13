@@ -22,6 +22,7 @@ import math
 import time
 import os
 import sys
+import threading
 from datetime import datetime
 
 import paho.mqtt.client as mqtt
@@ -89,11 +90,48 @@ class BolgeHavuzu:
         self.kayit_id_haritasi = {}  # id(kayit) -> veritabanındaki satır id'si
         self.vt = veritabani
 
+        # Görev atama durumu, bölge konumuna göre (yuvarlanmış lat/lon)
+        # anahtarlanır. Bölgeler her mesajda yeniden hesaplandığı için
+        # (bolgele() metoduyla) durumun kaybolmaması burada tutulur.
+        self.durumlar = {}  # (lat_yuvarlanmis, lon_yuvarlanmis) -> durum string
+
+        # MQTT thread'i (ana thread, loop_forever) ile WebSocket thread'i
+        # (panelden gelen durum güncellemeleri) aynı anda self.kayitlar
+        # ve self.durumlar'a erişebileceği için, veri bozulmasını
+        # önlemek amacıyla bir kilit kullanılır.
+        self._kilit = threading.Lock()
+
+    @staticmethod
+    def _durum_anahtari(konum: dict) -> tuple:
+        """Bir konumu, durum takibi için kararlı bir anahtara çevirir
+        (yaklaşık 11 metre hassasiyetle yuvarlanmış lat/lon)."""
+        return (round(konum["lat"], 4), round(konum["lon"], 4))
+
     def ekle(self, kayit: dict):
-        self.kayitlar.append(kayit)
-        if self.vt is not None:
-            db_id = self.vt.ham_kayit_ekle(kayit)
-            self.kayit_id_haritasi[id(kayit)] = db_id
+        with self._kilit:
+            self.kayitlar.append(kayit)
+            if self.vt is not None:
+                db_id = self.vt.ham_kayit_ekle(kayit)
+                self.kayit_id_haritasi[id(kayit)] = db_id
+
+    def durum_guncelle(self, konum: dict, yeni_durum: str):
+        """
+        Komuta Paneli'nden gelen bir görev atama güncellemesini işler.
+        Durumu belleğe kaydeder, ardından raporu yeniden hesaplayıp
+        (veritabanına yazıp + WebSocket'e yayınlayıp) tüm istemcilerin
+        güncel durumu görmesini sağlar.
+        """
+        gecerli_durumlar = {"beklemede", "ekip_gonderildi", "kontrol_edildi"}
+        if yeni_durum not in gecerli_durumlar:
+            print(f"[HATA] Geçersiz durum: {yeni_durum}")
+            return
+
+        anahtar = self._durum_anahtari(konum)
+        with self._kilit:
+            self.durumlar[anahtar] = yeni_durum
+
+        print(f"[DURUM GÜNCELLENDİ] {konum} -> {yeni_durum}")
+        self.rapor_yazdir()
 
     def bolgele(self) -> list[dict]:
         """
@@ -109,7 +147,10 @@ class BolgeHavuzu:
         """
         gruplar = []
 
-        for kayit in self.kayitlar:
+        with self._kilit:
+            kayitlar_kopyasi = list(self.kayitlar)
+
+        for kayit in kayitlar_kopyasi:
             uygun_grup = None
 
             for grup in gruplar:
@@ -158,12 +199,17 @@ class BolgeHavuzu:
         ortalama_guven = toplam_guven / len(kayitlar)
         sensor_tipleri = sorted(set(k["sensor_tipi"] for k in kayitlar))
 
+        anahtar = self._durum_anahtari(grup["merkez_konum"])
+        with self._kilit:
+            durum = self.durumlar.get(anahtar, "beklemede")
+
         return {
             "merkez_konum": grup["merkez_konum"],
             "kayit_sayisi": len(kayitlar),
             "sensor_tipleri": sensor_tipleri,
             "farkli_sensor_tipi_sayisi": len(sensor_tipleri),
             "birlesik_guven_skoru": round(ortalama_guven, 3),
+            "durum": durum,
             "kayitlar": kayitlar,
         }
 
@@ -184,17 +230,19 @@ class BolgeHavuzu:
             bolge["aciklama"] = risk_sonucu["aciklama"]
 
         if self.vt is not None:
-            self.vt.bolgeleri_temizle()
-            for bolge in bolgeler:
-                kayit_idleri = [
-                    self.kayit_id_haritasi[id(k)] for k in bolge["kayitlar"]
-                    if id(k) in self.kayit_id_haritasi
-                ]
-                self.vt.bolge_kaydet(
-                    bolge, kayit_idleri,
-                    oncelik_skoru=bolge["oncelik_skoru"],
-                    yapisal_risk_skoru=bolge["yapisal_risk_skoru"],
-                )
+            with self._kilit:
+                self.vt.bolgeleri_temizle()
+                for bolge in bolgeler:
+                    kayit_idleri = [
+                        self.kayit_id_haritasi[id(k)] for k in bolge["kayitlar"]
+                        if id(k) in self.kayit_id_haritasi
+                    ]
+                    self.vt.bolge_kaydet(
+                        bolge, kayit_idleri,
+                        oncelik_skoru=bolge["oncelik_skoru"],
+                        yapisal_risk_skoru=bolge["yapisal_risk_skoru"],
+                        durum=bolge["durum"],
+                    )
 
         print(f"\n{'=' * 60}")
         print(f"BÖLGE RAPORU  ({len(self.kayitlar)} ham kayıt -> {len(bolgeler)} bölge)")
@@ -210,6 +258,7 @@ class BolgeHavuzu:
             print(f"  Birleşik güven skoru       : {bolge['birlesik_guven_skoru']}")
             print(f"  >>> ÖNCELİK SKORU          : {bolge['oncelik_skoru']}")
             print(f"  >>> YAPISAL RİSK SKORU     : {bolge['yapisal_risk_skoru']}")
+            print(f"  Durum                      : {bolge['durum']}")
             if bolge["aciklama"]:
                 print(f"  Açıklama:")
                 for satir in bolge["aciklama"]:
@@ -228,6 +277,7 @@ class BolgeHavuzu:
                     "birlesik_guven_skoru": bolge["birlesik_guven_skoru"],
                     "oncelik_skoru": bolge["oncelik_skoru"],
                     "yapisal_risk_skoru": bolge["yapisal_risk_skoru"],
+                    "durum": bolge["durum"],
                 }
                 for bolge in bolgeler
             ],
@@ -259,6 +309,17 @@ def on_message(client, userdata, msg):
     havuz.rapor_yazdir()
 
 
+def ws_mesaj_geldi(mesaj: dict):
+    """
+    WebSocket istemcisinden (Komuta Paneli) gelen mesajları işler.
+    Şu an tek mesaj tipi destekleniyor: "durum_guncelleme".
+    """
+    if mesaj.get("tip") == "durum_guncelleme":
+        havuz.durum_guncelle(mesaj["konum"], mesaj["durum"])
+    else:
+        print(f"[WebSocket] Bilinmeyen mesaj tipi: {mesaj.get('tip')}")
+
+
 def gateway_baslat():
     global havuz
 
@@ -267,6 +328,7 @@ def gateway_baslat():
     print(f"Veritabanı hazır: {DB_DOSYA_YOLU}")
 
     ws_server.baslat()
+    ws_server.mesaj_dinleyicisi_ayarla(ws_mesaj_geldi)
     time.sleep(0.5)  # WebSocket sunucusunun thread'de başlaması için kısa bekleme
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)

@@ -20,7 +20,11 @@ import sqlite3
 class Veritabani:
     def __init__(self, db_dosya_yolu: str = "afet_risk.db"):
         self.db_dosya_yolu = db_dosya_yolu
-        self.baglanti = sqlite3.connect(db_dosya_yolu)
+        # check_same_thread=False: Gateway'de MQTT (ana thread) ve WebSocket
+        # sunucusu (ayrı thread) aynı veritabanı bağlantısını kullanabilir.
+        # Eşzamanlı erişimi güvenli hale getirmek için gateway.py tarafında
+        # ayrıca bir kilit (threading.Lock) kullanılır.
+        self.baglanti = sqlite3.connect(db_dosya_yolu, check_same_thread=False)
         self.baglanti.row_factory = sqlite3.Row
         self._semayi_kur()
 
@@ -57,20 +61,22 @@ class Veritabani:
         return imlec.lastrowid
 
     def bolge_kaydet(self, bolge: dict, kayit_id_listesi: list[int],
-                      oncelik_skoru: float = 0.0, yapisal_risk_skoru: float = 0.0) -> int:
+                      oncelik_skoru: float = 0.0, yapisal_risk_skoru: float = 0.0,
+                      durum: str = "beklemede") -> int:
         """
         Gateway'in ürettiği birleşik bir bölgeyi bolgeler tablosuna ekler
         ve o bölgeye giren ham kayıtları bolge_kayitlar ile ilişkilendirir.
         oncelik_skoru ve yapisal_risk_skoru, YZ Motoru tarafından
-        hesaplanıp buraya parametre olarak verilir.
+        hesaplanıp buraya parametre olarak verilir. durum, Komuta
+        Paneli'nden gelen görev atama durumunu taşır.
         """
         imlec = self.baglanti.execute(
             """
             INSERT INTO bolgeler
                 (merkez_lat, merkez_lon, birlesik_guven_skoru,
                  farkli_sensor_tipi_sayisi, kayit_sayisi, sensor_tipleri,
-                 oncelik_skoru, yapisal_risk_skoru)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 oncelik_skoru, yapisal_risk_skoru, durum)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 bolge["merkez_konum"]["lat"],
@@ -81,6 +87,7 @@ class Veritabani:
                 ",".join(bolge["sensor_tipleri"]),
                 oncelik_skoru,
                 yapisal_risk_skoru,
+                durum,
             ),
         )
         bolge_id = imlec.lastrowid

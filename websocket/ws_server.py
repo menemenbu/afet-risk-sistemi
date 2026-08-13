@@ -22,15 +22,32 @@ WS_PORT = 8765
 
 _baglantilar = set()
 _loop = None  # WebSocket sunucusunun çalıştığı asyncio event loop
+_mesaj_callback = None  # istemciden mesaj geldiğinde çağrılacak fonksiyon
+
+
+def mesaj_dinleyicisi_ayarla(callback):
+    """
+    Gateway tarafından çağrılır. İstemciden (örn. Komuta Paneli) bir
+    mesaj geldiğinde bu callback fonksiyonu çağrılır. callback,
+    ayrıştırılmış (dict) mesajı parametre olarak alır.
+    """
+    global _mesaj_callback
+    _mesaj_callback = callback
 
 
 async def _handler(websocket):
-    """Yeni bir istemci bağlandığında/ayrıldığında listeyi günceller."""
+    """Yeni bir istemci bağlandığında/ayrıldığında listeyi günceller,
+    istemciden gelen mesajları dinler."""
     _baglantilar.add(websocket)
     print(f"[WebSocket] Yeni istemci bağlandı. Toplam: {len(_baglantilar)}")
     try:
-        async for _ in websocket:
-            pass  # şimdilik istemciden gelen mesajları dikkate almıyoruz
+        async for ham_mesaj in websocket:
+            if _mesaj_callback is not None:
+                try:
+                    mesaj = json.loads(ham_mesaj)
+                    _mesaj_callback(mesaj)
+                except json.JSONDecodeError:
+                    print("[WebSocket] Geçersiz JSON mesaj alındı, atlanıyor.")
     finally:
         _baglantilar.discard(websocket)
         print(f"[WebSocket] İstemci ayrıldı. Toplam: {len(_baglantilar)}")

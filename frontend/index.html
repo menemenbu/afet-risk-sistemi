@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Afet Risk Sistemi — Canlı Harita</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #0b0f14;
+    --bg-1: #121822;
+    --bg-2: #1a2230;
+    --border: #263142;
+    --text-hi: #e8edf4;
+    --text-mid: #9aa8bd;
+    --text-low: #5d6b80;
+    --accent: #3fa9f5;
+    --risk-low: #3ecf6e;
+    --risk-mid: #f0b429;
+    --risk-high: #e5484d;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg-0);
+    font-family: var(--font-sans);
+    color: var(--text-hi);
+    overflow: hidden;
+  }
+
+  #harita {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  /* Leaflet karanlık tema uyumu */
+  .leaflet-container { background: var(--bg-0); }
+  .leaflet-popup-content-wrapper {
+    background: var(--bg-1);
+    color: var(--text-hi);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--font-sans);
+  }
+  .leaflet-popup-tip { background: var(--bg-1); border: 1px solid var(--border); }
+  .leaflet-popup-content { margin: 14px 16px; }
+  .leaflet-control-zoom a {
+    background: var(--bg-1) !important;
+    color: var(--text-hi) !important;
+    border-color: var(--border) !important;
+  }
+
+  /* --- Üst Başlık --- */
+  header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    background: linear-gradient(to bottom, rgba(11,15,20,0.92), rgba(11,15,20,0));
+    pointer-events: none;
+  }
+
+  .baslik {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .baslik h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-hi);
+  }
+
+  .baslik .alt {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-low);
+    letter-spacing: 0.05em;
+  }
+
+  #baglanti-durumu {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-mid);
+    letter-spacing: 0.03em;
+    pointer-events: auto;
+  }
+
+  #baglanti-noktasi {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-low);
+    transition: background 0.3s;
+  }
+  #baglanti-noktasi.bagli {
+    background: var(--risk-low);
+    box-shadow: 0 0 8px var(--risk-low);
+  }
+  #baglanti-noktasi.koptu {
+    background: var(--risk-high);
+    box-shadow: 0 0 8px var(--risk-high);
+  }
+
+  /* --- Yan Panel: Bölge Listesi --- */
+  #panel {
+    position: absolute;
+    top: 70px;
+    right: 20px;
+    bottom: 20px;
+    width: 320px;
+    z-index: 10;
+    background: rgba(18, 24, 34, 0.88);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #panel-baslik {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  #panel-baslik h2 {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-mid);
+  }
+
+  #toplam-kayit {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-low);
+  }
+
+  #bolge-listesi {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  #bolge-listesi::-webkit-scrollbar { width: 6px; }
+  #bolge-listesi::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .bolge-karti {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--risk-low);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .bolge-karti:hover {
+    transform: translateX(-2px);
+    border-color: var(--accent);
+  }
+
+  .bolge-karti-ust {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .bolge-etiket {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-low);
+    letter-spacing: 0.04em;
+  }
+
+  .oncelik-rozeti {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .bolge-sensorler {
+    font-size: 12px;
+    color: var(--text-mid);
+    line-height: 1.5;
+  }
+
+  .bolge-alt-satir {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-low);
+  }
+
+  #bos-durum {
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--text-low);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* --- Alt Sol Lejant --- */
+  #lejant {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 10;
+    background: rgba(18, 24, 34, 0.88);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-mid);
+    display: flex;
+    gap: 16px;
+  }
+
+  .lejant-oge { display: flex; align-items: center; gap: 6px; }
+  .lejant-nokta { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* --- Nabız Animasyonu (yüksek öncelikli işaretçiler) --- */
+  .nabiz-halka {
+    border-radius: 50%;
+    animation: nabiz 1.6s ease-out infinite;
+  }
+  @keyframes nabiz {
+    0%   { transform: scale(0.6); opacity: 0.9; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="harita"></div>
+
+<header>
+  <div class="baslik">
+    <h1>Afet Risk Sistemi</h1>
+    <span class="alt">CANLI HARİTA</span>
+  </div>
+  <div id="baglanti-durumu">
+    <div id="baglanti-noktasi"></div>
+    <span id="baglanti-metni">BAĞLANIYOR...</span>
+  </div>
+</header>
+
+<div id="panel">
+  <div id="panel-baslik">
+    <h2>Bölgeler</h2>
+    <span id="toplam-kayit">0 ham kayıt</span>
+  </div>
+  <div id="bolge-listesi">
+    <div id="bos-durum">
+      Henüz bölge verisi yok.<br>
+      Gateway ve adaptör çalıştığında<br>
+      bölgeler burada listelenecek.
+    </div>
+  </div>
+</div>
+
+<div id="lejant">
+  <div class="lejant-oge"><div class="lejant-nokta" style="background:#3ecf6e"></div> Düşük öncelik</div>
+  <div class="lejant-oge"><div class="lejant-nokta" style="background:#f0b429"></div> Orta öncelik</div>
+  <div class="lejant-oge"><div class="lejant-nokta" style="background:#e5484d"></div> Yüksek öncelik</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // --- Ayarlar ---
+  const WS_URL = "ws://localhost:8765";
+  const BASLANGIC_KONUM = [41.6785, 26.5545]; // mock veri bölgesine göre
+  const BASLANGIC_ZOOM = 16;
+
+  // --- Harita Kurulumu ---
+  const harita = L.map('harita', { zoomControl: true }).setView(BASLANGIC_KONUM, BASLANGIC_ZOOM);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 19,
+  }).addTo(harita);
+
+  let isaretciler = []; // { marker, halkaMarker }
+
+  // --- Renk / Ölçek Yardımcıları ---
+  function riskRengi(skor) {
+    if (skor >= 0.7) return '#e5484d';
+    if (skor >= 0.3) return '#f0b429';
+    return '#3ecf6e';
+  }
+
+  function riskYaricapi(skor) {
+    return 8 + skor * 14; // 8px - 22px arası
+  }
+
+  // --- İşaretçileri Güncelle ---
+  function isaretcileriGuncelle(bolgeler) {
+    // Eski işaretçileri temizle
+    isaretciler.forEach(({ marker, halkaMarker }) => {
+      harita.removeLayer(marker);
+      if (halkaMarker) harita.removeLayer(halkaMarker);
+    });
+    isaretciler = [];
+
+    bolgeler.forEach((bolge, i) => {
+      const renk = riskRengi(bolge.oncelik_skoru);
+      const yaricap = riskYaricapi(bolge.oncelik_skoru);
+      const konum = [bolge.konum.lat, bolge.konum.lon];
+
+      // Yüksek öncelikli bölgeler için nabız halkası
+      let halkaMarker = null;
+      if (bolge.oncelik_skoru >= 0.7) {
+        halkaMarker = L.circleMarker(konum, {
+          radius: yaricap,
+          color: renk,
+          weight: 2,
+          fillOpacity: 0,
+          className: 'nabiz-halka',
+        }).addTo(harita);
+      }
+
+      const marker = L.circleMarker(konum, {
+        radius: yaricap,
+        color: renk,
+        weight: 2,
+        fillColor: renk,
+        fillOpacity: 0.55,
+      }).addTo(harita);
+
+      marker.bindPopup(bolgePopupIcerigi(bolge));
+      marker.bolgeIndex = i;
+
+      isaretciler.push({ marker, halkaMarker });
+    });
+  }
+
+  function bolgePopupIcerigi(bolge) {
+    const DURUM_ETIKETLERI = {
+      beklemede: "Beklemede",
+      ekip_gonderildi: "Ekip Gönderildi",
+      kontrol_edildi: "Kontrol Edildi",
+    };
+    return `
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; min-width: 200px;">
+        <div style="font-weight:700; font-size:13px; margin-bottom:8px; color:${riskRengi(bolge.oncelik_skoru)}">
+          ÖNCELİK: ${(bolge.oncelik_skoru * 100).toFixed(0)}%
+        </div>
+        <div style="color:#9aa8bd; line-height:1.7;">
+          Yapısal Risk: ${(bolge.yapisal_risk_skoru * 100).toFixed(0)}%<br>
+          Güven Skoru: ${(bolge.birlesik_guven_skoru * 100).toFixed(0)}%<br>
+          Kayıt Sayısı: ${bolge.kayit_sayisi}<br>
+          Sensörler: ${bolge.sensor_tipleri.join(', ')}<br>
+          Durum: <b style="color:#e8edf4">${DURUM_ETIKETLERI[bolge.durum] || bolge.durum}</b>
+        </div>
+      </div>
+    `;
+  }
+
+  // --- Yan Paneli Güncelle ---
+  function panelGuncelle(bolgeler, toplamHamKayit) {
+    document.getElementById('toplam-kayit').textContent = `${toplamHamKayit} ham kayıt`;
+
+    const liste = document.getElementById('bolge-listesi');
+
+    if (bolgeler.length === 0) {
+      liste.innerHTML = `<div id="bos-durum">Henüz bölge verisi yok.</div>`;
+      return;
+    }
+
+    const siraliBolgeler = [...bolgeler].sort((a, b) => b.oncelik_skoru - a.oncelik_skoru);
+
+    liste.innerHTML = siraliBolgeler.map((bolge, i) => {
+      const renk = riskRengi(bolge.oncelik_skoru);
+      return `
+        <div class="bolge-karti" style="border-left-color:${renk}" data-index="${bolgeler.indexOf(bolge)}">
+          <div class="bolge-karti-ust">
+            <span class="bolge-etiket">BÖLGE ${i + 1}</span>
+            <span class="oncelik-rozeti" style="color:${renk}; background:${renk}22;">
+              ${(bolge.oncelik_skoru * 100).toFixed(0)}%
+            </span>
+          </div>
+          <div class="bolge-sensorler">${bolge.sensor_tipleri.join(', ')}</div>
+          <div class="bolge-alt-satir">
+            <span>YAPISAL: ${(bolge.yapisal_risk_skoru * 100).toFixed(0)}%</span>
+            <span>${bolge.kayit_sayisi} KAYIT</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Karta tıklayınca haritada o noktaya uç
+    liste.querySelectorAll('.bolge-karti').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.index, 10);
+        const bolge = bolgeler[idx];
+        harita.flyTo([bolge.konum.lat, bolge.konum.lon], 18, { duration: 0.6 });
+        const eslesen = isaretciler[idx];
+        if (eslesen) eslesen.marker.openPopup();
+      });
+    });
+  }
+
+  // --- Bağlantı Durumu Göstergesi ---
+  function baglantiDurumGuncelle(durum) {
+    const nokta = document.getElementById('baglanti-noktasi');
+    const metin = document.getElementById('baglanti-metni');
+    nokta.className = '';
+    if (durum === 'bagli') {
+      nokta.classList.add('bagli');
+      metin.textContent = 'BAĞLI';
+    } else if (durum === 'koptu') {
+      nokta.classList.add('koptu');
+      metin.textContent = 'BAĞLANTI YOK';
+    } else {
+      metin.textContent = 'BAĞLANIYOR...';
+    }
+  }
+
+  // --- WebSocket Bağlantısı ---
+  function baglantiKur() {
+    const ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => baglantiDurumGuncelle('bagli');
+
+    ws.onmessage = (event) => {
+      const mesaj = JSON.parse(event.data);
+      if (mesaj.tip === 'bolge_guncelleme') {
+        isaretcileriGuncelle(mesaj.bolgeler);
+        panelGuncelle(mesaj.bolgeler, mesaj.toplam_ham_kayit);
+      }
+    };
+
+    ws.onclose = () => {
+      baglantiDurumGuncelle('koptu');
+      setTimeout(baglantiKur, 2000); // otomatik yeniden bağlanma denemesi
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  baglantiKur();
+</script>
+
+</body>
+</html>

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS bolgeler (
     sensor_tipleri              TEXT NOT NULL,   -- virgülle ayrılmış liste
     oncelik_skoru                REAL NOT NULL DEFAULT 0,   -- YZ Motoru: hayat kurtarma önceliği
     yapisal_risk_skoru           REAL NOT NULL DEFAULT 0,   -- YZ Motoru: yapısal çökme riski
+    durum                        TEXT NOT NULL DEFAULT 'beklemede',  -- beklemede | ekip_gonderildi | kontrol_edildi
     guncellenme_zamani          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
