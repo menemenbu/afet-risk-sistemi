@@ -37,7 +37,10 @@ from risk_motoru import bolge_risk_hesapla
 import ws_server
 
 # --- MQTT Ayarları ---
-MQTT_HOST = "localhost"
+# MQTT_HOST ortam değişkeninden okunur; tanımlı değilse "localhost"
+# varsayılır (yerel/Docker dışı çalıştırma için). Docker Compose
+# içinde bu değer "mosquitto" (servis adı) olarak ayarlanır.
+MQTT_HOST = os.environ.get("MQTT_HOST", "localhost")
 MQTT_PORT = 1883
 MQTT_TOPIC = "sensor/#"   # tüm sensör tiplerini dinle
 
@@ -95,6 +98,13 @@ class BolgeHavuzu:
         # (bolgele() metoduyla) durumun kaybolmaması burada tutulur.
         self.durumlar = {}  # (lat_yuvarlanmis, lon_yuvarlanmis) -> durum string
 
+        # Yinelenen Mesaj Tespiti: (sensor_id, zaman_damgasi) ikilisi
+        # daha önce görüldüyse, aynı mesajın MQTT üzerinden (örn. bağlantı
+        # kesintisi/yeniden deneme yüzünden) birden fazla kez gelmiş
+        # olma ihtimaline karşı kayıt tekrar eklenmez. Bu, güven skorunu
+        # ve kayıt sayısını yapay olarak şişirmeyi önler.
+        self._gorulen_kayitlar = set()
+
         # MQTT thread'i (ana thread, loop_forever) ile WebSocket thread'i
         # (panelden gelen durum güncellemeleri) aynı anda self.kayitlar
         # ve self.durumlar'a erişebileceği için, veri bozulmasını
@@ -107,12 +117,24 @@ class BolgeHavuzu:
         (yaklaşık 11 metre hassasiyetle yuvarlanmış lat/lon)."""
         return (round(konum["lat"], 4), round(konum["lon"], 4))
 
-    def ekle(self, kayit: dict):
+    def ekle(self, kayit: dict) -> bool:
+        """
+        Yeni bir ham kaydı havuza ekler. Aynı sensörden aynı zaman
+        damgasıyla daha önce bir kayıt geldiyse (yinelenen mesaj),
+        eklenmez ve False döner.
+        """
+        yinelenen_anahtar = (kayit["sensor_id"], kayit["zaman_damgasi"])
+
         with self._kilit:
+            if yinelenen_anahtar in self._gorulen_kayitlar:
+                return False
+            self._gorulen_kayitlar.add(yinelenen_anahtar)
+
             self.kayitlar.append(kayit)
             if self.vt is not None:
                 db_id = self.vt.ham_kayit_ekle(kayit)
                 self.kayit_id_haritasi[id(kayit)] = db_id
+        return True
 
     def durum_guncelle(self, konum: dict, yeni_durum: str):
         """
@@ -199,17 +221,34 @@ class BolgeHavuzu:
         ortalama_guven = toplam_guven / len(kayitlar)
         sensor_tipleri = sorted(set(k["sensor_tipi"] for k in kayitlar))
 
+        # Merkez konum: gruba İLK giren kaydın konumu yerine, gruptaki
+        # TÜM kayıtların ortalama konumu kullanılır. Bu, tek bir sensörün
+        # (özellikle o grubu ilk açan sensörün) hatalı/gürültülü bir GPS
+        # okuması göndermesi durumunda tüm bölgenin haritada yanlış
+        # konumlanmasını önler - daha fazla sensör katkı verdikçe merkez
+        # konum da gerçek değerine yaklaşır.
+        ortalama_lat = sum(k["konum"]["lat"] for k in kayitlar) / len(kayitlar)
+        ortalama_lon = sum(k["konum"]["lon"] for k in kayitlar) / len(kayitlar)
+        merkez_konum = {"lat": round(ortalama_lat, 6), "lon": round(ortalama_lon, 6)}
+
+        # Veri Tazeliği: gruptaki kayıtlar arasında en YENİ zaman damgası,
+        # "bu bölgeden en son ne zaman gerçek veri geldi" bilgisini verir.
+        # Sensör susmuşsa (öldü/pil bitti/ulaşılamıyor), bu zaman ilerlemez
+        # ve arayüz bunu "bayat veri" olarak işaretleyebilir.
+        son_guncelleme = max(k["zaman_damgasi"] for k in kayitlar)
+
         anahtar = self._durum_anahtari(grup["merkez_konum"])
         with self._kilit:
             durum = self.durumlar.get(anahtar, "beklemede")
 
         return {
-            "merkez_konum": grup["merkez_konum"],
+            "merkez_konum": merkez_konum,
             "kayit_sayisi": len(kayitlar),
             "sensor_tipleri": sensor_tipleri,
             "farkli_sensor_tipi_sayisi": len(sensor_tipleri),
             "birlesik_guven_skoru": round(ortalama_guven, 3),
             "durum": durum,
+            "son_guncelleme": son_guncelleme,
             "kayitlar": kayitlar,
         }
 
@@ -278,6 +317,7 @@ class BolgeHavuzu:
                     "oncelik_skoru": bolge["oncelik_skoru"],
                     "yapisal_risk_skoru": bolge["yapisal_risk_skoru"],
                     "durum": bolge["durum"],
+                    "son_guncelleme": bolge["son_guncelleme"],
                 }
                 for bolge in bolgeler
             ],
@@ -301,12 +341,29 @@ def on_message(client, userdata, msg):
         print(f"[HATA] Geçersiz JSON mesaj alındı: {msg.topic}")
         return
 
-    havuz.ekle(kayit)
+    yeni_mi = havuz.ekle(kayit)
+    if not yeni_mi:
+        print(f"[YİNELENEN - ATLANDI] {kayit['sensor_id']} "
+              f"({kayit['zaman_damgasi']}) daha önce işlendi.")
+        return
+
     print(f"[ALINDI <- {msg.topic}] {kayit['sensor_id']} "
           f"(güven: {kayit['guven_skoru']})")
 
-    # Her yeni kayıttan sonra güncel bölge raporunu yazdır (+ veritabanına kaydet)
-    havuz.rapor_yazdir()
+    # SAVUNMA KATMANI: Adaptördeki doğrulamayı bir şekilde atlatan
+    # (örn. ileride eklenecek yeni bir sensör tipinde öngörülmemiş bir
+    # değer kombinasyonu) beklenmedik bir veri, burada YZ Motoru veya
+    # veritabanı katmanında bir hataya yol açabilir. TEK bir bozuk
+    # kaydın, TÜM sistemin mesaj işlemeyi durdurmasına neden olmaması
+    # için bu adım try/except ile korunur - proje felsefesi "eksik/
+    # bozuk veri olsa bile elimizdekiyle çalışmaya devam et" olduğu
+    # için bu katman kritik önemde.
+    try:
+        havuz.rapor_yazdir()
+    except Exception as e:
+        print(f"[KRİTİK HATA - YAKALANDI] rapor_yazdir sırasında hata: "
+              f"{type(e).__name__}: {e}")
+        print("Gateway çalışmaya devam ediyor, bu kayıt/tur atlandı.")
 
 
 def ws_mesaj_geldi(mesaj: dict):

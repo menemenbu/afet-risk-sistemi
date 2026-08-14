@@ -70,6 +70,26 @@
     font-size: 11px;
     color: var(--text-mid);
   }
+
+  #sayfa-gecis { display: flex; align-items: center; gap: 16px; }
+
+  .gecis-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-mid);
+    text-decoration: none;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-2);
+    transition: all 0.15s;
+  }
+  .gecis-btn:hover {
+    color: var(--text-hi);
+    border-color: var(--accent);
+  }
   #baglanti-noktasi {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--text-low);
@@ -233,9 +253,12 @@
     <h1>Afet Risk Sistemi</h1>
     <span class="alt">KOMUTA PANELİ</span>
   </div>
-  <div id="baglanti-durumu">
-    <div id="baglanti-noktasi"></div>
-    <span id="baglanti-metni">BAĞLANIYOR...</span>
+  <div id="sayfa-gecis">
+    <a class="gecis-btn" href="index.html">← Canlı Harita</a>
+    <div id="baglanti-durumu">
+      <div id="baglanti-noktasi"></div>
+      <span id="baglanti-metni">BAĞLANIYOR...</span>
+    </div>
   </div>
 </header>
 
@@ -291,6 +314,30 @@
     if (skor >= 0.7) return '#e5484d';
     if (skor >= 0.3) return '#f0b429';
     return '#3ecf6e';
+  }
+
+  // --- Veri Tazeliği Yardımcıları ---
+  const BAYAT_ESIK_SANIYE = 300;
+  const COK_BAYAT_ESIK_SANIYE = 900;
+
+  function saniyeOnce(isoZaman) {
+    const then = new Date(isoZaman).getTime();
+    return Math.max(0, Math.floor((Date.now() - then) / 1000));
+  }
+
+  function tazelikMetni(saniye) {
+    if (saniye < 60) return `${saniye} sn önce`;
+    if (saniye < 3600) return `${Math.floor(saniye / 60)} dk önce`;
+    return `${Math.floor(saniye / 3600)} sa önce`;
+  }
+
+  function tazelikRozeti(sonGuncelleme) {
+    const saniye = saniyeOnce(sonGuncelleme);
+    let renk = 'var(--text-low)';
+    let etiket = '';
+    if (saniye >= COK_BAYAT_ESIK_SANIYE) { renk = 'var(--risk-high)'; etiket = ' ⚠'; }
+    else if (saniye >= BAYAT_ESIK_SANIYE) { renk = 'var(--risk-mid)'; etiket = ' ⚠'; }
+    return `<span style="color:${renk}">${tazelikMetni(saniye)}${etiket}</span>`;
   }
 
   function baglantiDurumGuncelle(durum) {
@@ -360,7 +407,8 @@
           <div class="metrik-hucre">
             Yapısal Risk: <b>${(bolge.yapisal_risk_skoru * 100).toFixed(0)}%</b><br>
             Güven: <b>${(bolge.birlesik_guven_skoru * 100).toFixed(0)}%</b><br>
-            Kayıt: <b>${bolge.kayit_sayisi}</b>
+            Kayıt: <b>${bolge.kayit_sayisi}</b><br>
+            Son Veri: ${tazelikRozeti(bolge.son_guncelleme)}
           </div>
           <div class="metrik-hucre">
             <span class="durum-rozeti durum-${bolge.durum}">${DURUM_ETIKETLERI[bolge.durum]}</span>
@@ -403,6 +451,12 @@
   }
 
   baglantiKur();
+
+  // "X dakika önce" metinlerinin canlı kalması için tablo periyodik
+  // olarak yeniden çizilir (yeni WebSocket mesajı gelmese bile).
+  setInterval(() => {
+    if (mevcutBolgeler.length > 0) tabloyuCiz();
+  }, 15000);
 </script>
 
 </body>

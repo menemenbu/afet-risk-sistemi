@@ -1,14 +1,62 @@
 version: "3.8"
 
+# Gateway ve Simülatör aynı Python imajını paylaşır (docker/app/Dockerfile).
+# Bu YAML "anchor" (&app-build), aynı build ayarını iki serviste
+# tekrar yazmamak için kullanılır.
+x-app-build: &app-build
+  context: .
+  dockerfile: docker/app/Dockerfile
+
 services:
+  # --- MQTT Broker ---
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: afet-mqtt-broker
     ports:
-      - "1883:1883"   # MQTT standart portu
-      - "9001:9001"   # WebSocket portu (ileride harita/panel tarayıcıdan bağlanmak isterse)
+      - "1883:1883"
+      - "9001:9001"
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
     restart: unless-stopped
+
+  # --- Merkezi Gateway (MQTT dinleme + YZ Motoru + Veritabanı + WebSocket) ---
+  gateway:
+    build: *app-build
+    container_name: afet-gateway
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_HOST: mosquitto   # Docker ağı içinde broker'a servis adıyla ulaşılır
+    ports:
+      - "8765:8765"          # WebSocket - tarayıcı buradan bağlanır
+    volumes:
+      - ./afet_risk.db:/app/afet_risk.db   # veritabanı, container dışında da kalıcı olsun
+    restart: unless-stopped
+
+  # --- Canlı Harita + Komuta Paneli (statik dosya sunucusu) ---
+  frontend:
+    image: nginx:alpine
+    container_name: afet-frontend
+    depends_on:
+      - gateway
+    ports:
+      - "8000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
+  # --- Simülatör (opsiyonel - sadece istendiğinde çalışır) ---
+  # Varsayılan `docker compose up` ile BAŞLAMAZ. Çalıştırmak için:
+  #   docker compose --profile demo up simulator
+  simulator:
+    build: *app-build
+    container_name: afet-simulator
+    depends_on:
+      - mosquitto
+      - gateway
+    environment:
+      MQTT_HOST: mosquitto
+    command: ["python", "simulator/simulator.py"]
+    profiles: ["demo"]

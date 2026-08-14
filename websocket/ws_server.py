@@ -17,7 +17,11 @@ import threading
 
 import websockets
 
-WS_HOST = "localhost"
+# WS_HOST = "0.0.0.0": tüm ağ arayüzlerinden bağlantı kabul eder.
+# Bu, hem yerel kullanımda (localhost dahil) hem Docker container
+# içinde çalışırken (port yönlendirmesinin çalışabilmesi için "localhost"
+# DEĞİL, 0.0.0.0 dinlenmelidir) doğru şekilde çalışır.
+WS_HOST = "0.0.0.0"
 WS_PORT = 8765
 
 _baglantilar = set()

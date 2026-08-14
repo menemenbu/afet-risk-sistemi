@@ -105,6 +105,31 @@
     pointer-events: auto;
   }
 
+  #sayfa-gecis {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    pointer-events: auto;
+  }
+
+  .gecis-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-mid);
+    text-decoration: none;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: rgba(18, 24, 34, 0.7);
+    transition: all 0.15s;
+  }
+  .gecis-btn:hover {
+    color: var(--text-hi);
+    border-color: var(--accent);
+  }
+
   #baglanti-noktasi {
     width: 8px;
     height: 8px;
@@ -271,9 +296,12 @@
     <h1>Afet Risk Sistemi</h1>
     <span class="alt">CANLI HARİTA</span>
   </div>
-  <div id="baglanti-durumu">
-    <div id="baglanti-noktasi"></div>
-    <span id="baglanti-metni">BAĞLANIYOR...</span>
+  <div id="sayfa-gecis">
+    <a class="gecis-btn" href="panel.html">Komuta Paneli →</a>
+    <div id="baglanti-durumu">
+      <div id="baglanti-noktasi"></div>
+      <span id="baglanti-metni">BAĞLANIYOR...</span>
+    </div>
   </div>
 </header>
 
@@ -325,6 +353,31 @@
     return 8 + skor * 14; // 8px - 22px arası
   }
 
+  // --- Veri Tazeliği Yardımcıları ---
+  const BAYAT_ESIK_SANIYE = 300;       // 5 dakika: "bayat veri" uyarısı
+  const COK_BAYAT_ESIK_SANIYE = 900;   // 15 dakika: "sensör sessiz" uyarısı
+
+  function saniyeOnce(isoZaman) {
+    const then = new Date(isoZaman).getTime();
+    const now = Date.now();
+    return Math.max(0, Math.floor((now - then) / 1000));
+  }
+
+  function tazelikMetni(saniye) {
+    if (saniye < 60) return `${saniye} sn önce`;
+    if (saniye < 3600) return `${Math.floor(saniye / 60)} dk önce`;
+    return `${Math.floor(saniye / 3600)} sa önce`;
+  }
+
+  function tazelikRozeti(sonGuncelleme) {
+    const saniye = saniyeOnce(sonGuncelleme);
+    let renk = '#5d6b80';
+    let etiket = '';
+    if (saniye >= COK_BAYAT_ESIK_SANIYE) { renk = '#e5484d'; etiket = ' ⚠ SENSÖR SESSİZ'; }
+    else if (saniye >= BAYAT_ESIK_SANIYE) { renk = '#f0b429'; etiket = ' ⚠ BAYAT VERİ'; }
+    return `<span style="color:${renk}">${tazelikMetni(saniye)}${etiket}</span>`;
+  }
+
   // --- İşaretçileri Güncelle ---
   function isaretcileriGuncelle(bolgeler) {
     // Eski işaretçileri temizle
@@ -357,6 +410,7 @@
         weight: 2,
         fillColor: renk,
         fillOpacity: 0.55,
+        dashArray: saniyeOnce(bolge.son_guncelleme) >= COK_BAYAT_ESIK_SANIYE ? '4,4' : null,
       }).addTo(harita);
 
       marker.bindPopup(bolgePopupIcerigi(bolge));
@@ -382,7 +436,8 @@
           Güven Skoru: ${(bolge.birlesik_guven_skoru * 100).toFixed(0)}%<br>
           Kayıt Sayısı: ${bolge.kayit_sayisi}<br>
           Sensörler: ${bolge.sensor_tipleri.join(', ')}<br>
-          Durum: <b style="color:#e8edf4">${DURUM_ETIKETLERI[bolge.durum] || bolge.durum}</b>
+          Durum: <b style="color:#e8edf4">${DURUM_ETIKETLERI[bolge.durum] || bolge.durum}</b><br>
+          Son Veri: ${tazelikRozeti(bolge.son_guncelleme)}
         </div>
       </div>
     `;
@@ -457,6 +512,7 @@
     ws.onmessage = (event) => {
       const mesaj = JSON.parse(event.data);
       if (mesaj.tip === 'bolge_guncelleme') {
+        sonBolgeler = mesaj.bolgeler;
         isaretcileriGuncelle(mesaj.bolgeler);
         panelGuncelle(mesaj.bolgeler, mesaj.toplam_ham_kayit);
       }
@@ -470,7 +526,20 @@
     ws.onerror = () => ws.close();
   }
 
+  let sonBolgeler = [];
+
   baglantiKur();
+
+  // Açık olan popup'lardaki "X dakika önce" metninin canlı kalması için
+  // (yeni WebSocket mesajı gelmese bile) periyodik olarak yeniden çizilir.
+  setInterval(() => {
+    isaretciler.forEach(({ marker }) => {
+      if (marker.isPopupOpen()) {
+        const bolge = sonBolgeler[marker.bolgeIndex];
+        if (bolge) marker.setPopupContent(bolgePopupIcerigi(bolge));
+      }
+    });
+  }, 15000);
 </script>
 
 </body>

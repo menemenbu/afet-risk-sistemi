@@ -16,7 +16,10 @@ from datetime import datetime
 import paho.mqtt.client as mqtt
 
 # --- MQTT Ayarları ---
-MQTT_HOST = "localhost"
+# MQTT_HOST ortam değişkeninden okunur; tanımlı değilse "localhost"
+# varsayılır (yerel/Docker dışı çalıştırma için). Docker Compose
+# içinde bu değer "mosquitto" (servis adı) olarak ayarlanır.
+MQTT_HOST = os.environ.get("MQTT_HOST", "localhost")
 MQTT_PORT = 1883
 MQTT_TOPIC_ONEKI = "sensor"   # topic'ler: sensor/termal, sensor/ses, vb.
 
@@ -27,12 +30,15 @@ ZORUNLU_ALANLAR = ["sensor_id", "sensor_tipi", "konum", "zaman_damgasi", "guven_
 GECERLI_TIPLER = ["termal", "ses", "kizilotesi", "rf", "sismik"]
 
 # Her sensör tipinin "veri" alanında olması gereken zorunlu anahtarlar
+# VE bu alanların beklenen değer tipi. Sadece "alan var mı" kontrolü
+# yetersiz - bir sensör alanı gönderip değerini None/bozuk yollayabilir
+# (örn. arızalı okuma). Bu yüzden tip kontrolü de burada tanımlanır.
 SENSOR_VERI_ALANLARI = {
-    "termal": ["sicaklik_max", "sicaklik_ortalama"],
-    "ses": ["desibel", "insan_sesi_tespit"],
-    "kizilotesi": ["sicaklik", "hareket_tespit"],
-    "rf": ["sinyal_gucu", "cihaz_tespit"],
-    "sismik": ["titresim_siddeti", "sure_sn"],
+    "termal": {"sicaklik_max": (int, float), "sicaklik_ortalama": (int, float)},
+    "ses": {"desibel": (int, float), "insan_sesi_tespit": bool},
+    "kizilotesi": {"sicaklik": (int, float), "hareket_tespit": bool},
+    "rf": {"sinyal_gucu": (int, float), "cihaz_tespit": bool},
+    "sismik": {"titresim_siddeti": (int, float), "sure_sn": (int, float)},
 }
 
 
@@ -67,12 +73,21 @@ def veri_dogrula(kayit: dict) -> tuple[bool, str]:
     except (ValueError, AttributeError):
         return False, f"zaman_damgasi geçersiz format: {kayit['zaman_damgasi']}"
 
-    # 6. Sensöre özel veri alanları eksiksiz mi?
-    beklenen_alanlar = SENSOR_VERI_ALANLARI.get(tip, [])
+    # 6. Sensöre özel veri alanları eksiksiz VE doğru tipte mi?
+    #    (Sadece alanın var olup olmadığına değil, değerin None olup
+    #    olmadığına ve beklenen tipte olup olmadığına da bakılır -
+    #    aksi halde bozuk/arızalı bir okuma sisteme "geçerli" olarak
+    #    sızabilir ve ilerideki hesaplamaları çökertebilir.)
+    beklenen_alanlar = SENSOR_VERI_ALANLARI.get(tip, {})
     veri = kayit.get("veri", {})
-    for alan in beklenen_alanlar:
+    for alan, beklenen_tip in beklenen_alanlar.items():
         if alan not in veri:
             return False, f"'{tip}' için eksik veri alanı: '{alan}'"
+        deger = veri[alan]
+        if deger is None:
+            return False, f"'{tip}.{alan}' değeri boş (None) olamaz"
+        if not isinstance(deger, beklenen_tip) or isinstance(deger, bool) != (beklenen_tip is bool):
+            return False, f"'{tip}.{alan}' beklenmeyen tipte: {deger!r} ({type(deger).__name__})"
 
     return True, ""
 
