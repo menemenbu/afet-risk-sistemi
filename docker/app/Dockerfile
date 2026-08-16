@@ -21,5 +21,6 @@ COPY gateway/ gateway/
 COPY simulator/ simulator/
 
 EXPOSE 8765
+EXPOSE 8766
 
 CMD ["python", "gateway/gateway.py"]

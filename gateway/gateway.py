@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.join(_mevcut_klasor, "..", "websocket"))
 from database import Veritabani
 from risk_motoru import bolge_risk_hesapla
 import ws_server
+import control_server
 
 # --- MQTT Ayarları ---
 # MQTT_HOST ortam değişkeninden okunur; tanımlı değilse "localhost"
@@ -112,10 +113,20 @@ class BolgeHavuzu:
         self._kilit = threading.Lock()
 
     @staticmethod
-    def _durum_anahtari(konum: dict) -> tuple:
-        """Bir konumu, durum takibi için kararlı bir anahtara çevirir
-        (yaklaşık 11 metre hassasiyetle yuvarlanmış lat/lon)."""
-        return (round(konum["lat"], 4), round(konum["lon"], 4))
+    def _bolge_id_uret(konum: dict) -> str:
+        """
+        Bir bölge için KARARLI (sabit) bir kimlik üretir. Bu, o bölgenin
+        ham_kayitlar arasından ilk kez o kümeyi açan kaydın konumuna göre
+        hesaplanır ve bölge büyüdükçe (yeni kayıtlar eklendikçe) DEĞİŞMEZ.
+
+        ÖNEMLİ: Bu, haritada/panelde GÖSTERİLEN merkez konumdan (ki o,
+        tüm kayıtların ortalamasıdır ve her yeni veride hafifçe kayar)
+        BİLEREK farklı tutulur. Durum (görev atama) takibi, kayan bir
+        değere değil, sabit bu kimliğe göre yapılır - aksi halde
+        kullanıcının "ekip gönderildi" dediği bölge, ortalama birkaç
+        santim kaydığında durumunu "kaybedebilir".
+        """
+        return f"{round(konum['lat'], 4)}_{round(konum['lon'], 4)}"
 
     def ekle(self, kayit: dict) -> bool:
         """
@@ -136,7 +147,7 @@ class BolgeHavuzu:
                 self.kayit_id_haritasi[id(kayit)] = db_id
         return True
 
-    def durum_guncelle(self, konum: dict, yeni_durum: str):
+    def durum_guncelle(self, bolge_id: str, yeni_durum: str):
         """
         Komuta Paneli'nden gelen bir görev atama güncellemesini işler.
         Durumu belleğe kaydeder, ardından raporu yeniden hesaplayıp
@@ -148,11 +159,10 @@ class BolgeHavuzu:
             print(f"[HATA] Geçersiz durum: {yeni_durum}")
             return
 
-        anahtar = self._durum_anahtari(konum)
         with self._kilit:
-            self.durumlar[anahtar] = yeni_durum
+            self.durumlar[bolge_id] = yeni_durum
 
-        print(f"[DURUM GÜNCELLENDİ] {konum} -> {yeni_durum}")
+        print(f"[DURUM GÜNCELLENDİ] {bolge_id} -> {yeni_durum}")
         self.rapor_yazdir()
 
     def bolgele(self) -> list[dict]:
@@ -237,11 +247,16 @@ class BolgeHavuzu:
         # ve arayüz bunu "bayat veri" olarak işaretleyebilir.
         son_guncelleme = max(k["zaman_damgasi"] for k in kayitlar)
 
-        anahtar = self._durum_anahtari(grup["merkez_konum"])
+        # bolge_id: bu bölgenin SABİT kimliği - grup['merkez_konum']
+        # (kümeyi ilk açan kaydın ham konumu) baz alınır, ORTALAMA
+        # merkez_konum'dan (yukarıda hesaplanan, kayan) BAĞIMSIZDIR.
+        # Durum takibi bu sabit kimlik üzerinden yapılır.
+        bolge_id = self._bolge_id_uret(grup["merkez_konum"])
         with self._kilit:
-            durum = self.durumlar.get(anahtar, "beklemede")
+            durum = self.durumlar.get(bolge_id, "beklemede")
 
         return {
+            "bolge_id": bolge_id,
             "merkez_konum": merkez_konum,
             "kayit_sayisi": len(kayitlar),
             "sensor_tipleri": sensor_tipleri,
@@ -310,6 +325,7 @@ class BolgeHavuzu:
             "toplam_ham_kayit": len(self.kayitlar),
             "bolgeler": [
                 {
+                    "bolge_id": bolge["bolge_id"],
                     "konum": bolge["merkez_konum"],
                     "sensor_tipleri": bolge["sensor_tipleri"],
                     "kayit_sayisi": bolge["kayit_sayisi"],
@@ -372,7 +388,7 @@ def ws_mesaj_geldi(mesaj: dict):
     Şu an tek mesaj tipi destekleniyor: "durum_guncelleme".
     """
     if mesaj.get("tip") == "durum_guncelleme":
-        havuz.durum_guncelle(mesaj["konum"], mesaj["durum"])
+        havuz.durum_guncelle(mesaj["bolge_id"], mesaj["durum"])
     else:
         print(f"[WebSocket] Bilinmeyen mesaj tipi: {mesaj.get('tip')}")
 
@@ -392,7 +408,8 @@ def gateway_baslat():
 
     ws_server.baslat()
     ws_server.mesaj_dinleyicisi_ayarla(ws_mesaj_geldi)
-    time.sleep(0.5)  # WebSocket sunucusunun thread'de başlaması için kısa bekleme
+    control_server.baslat()
+    time.sleep(0.5)  # WebSocket/Kontrol sunucularının thread'de başlaması için kısa bekleme
 
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.on_connect = on_connect

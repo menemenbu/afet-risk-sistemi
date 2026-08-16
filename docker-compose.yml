@@ -31,6 +31,7 @@ services:
       MQTT_HOST: mosquitto   # Docker ağı içinde broker'a servis adıyla ulaşılır
     ports:
       - "8765:8765"          # WebSocket - tarayıcı buradan bağlanır
+      - "8766:8766"          # Kontrol sunucusu - "Simülatörü Başlat" butonu buradan tetikler
     volumes:
       - ./afet_risk.db:/app/afet_risk.db   # veritabanı, container dışında da kalıcı olsun
     restart: unless-stopped

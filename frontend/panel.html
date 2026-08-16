@@ -90,6 +90,31 @@
     color: var(--text-hi);
     border-color: var(--accent);
   }
+
+  #simulator-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border: 1px solid var(--risk-low);
+    border-radius: 6px;
+    background: #3ecf6e18;
+    color: var(--risk-low);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #simulator-btn:hover {
+    background: #3ecf6e2e;
+  }
+  #simulator-btn.kopyalandi {
+    border-color: var(--accent);
+    background: #3fa9f518;
+    color: var(--accent);
+  }
   #baglanti-noktasi {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--text-low);
@@ -254,6 +279,9 @@
     <span class="alt">KOMUTA PANELİ</span>
   </div>
   <div id="sayfa-gecis">
+    <button id="simulator-btn" onclick="simulatorBaslatTiklandi()">
+      ▶ Simülatörü Başlat
+    </button>
     <a class="gecis-btn" href="index.html">← Canlı Harita</a>
     <div id="baglanti-durumu">
       <div id="baglanti-noktasi"></div>
@@ -310,6 +338,53 @@
     kontrol_edildi: "Kontrol Edildi",
   };
 
+  // --- Simülatör Başlatma ---
+  // Önce Gateway'in kontrol sunucusuna (8766) gerçek bir başlatma isteği
+  // gönderilir - bu, simülatörü Gateway ile AYNI ortamda (Docker
+  // container'ı içinde) bir alt süreç olarak başlatır, kullanıcının
+  // kendi bilgisayarında hiçbir şey çalıştırmasına gerek kalmaz.
+  //
+  // Eğer kontrol sunucusuna ulaşılamazsa (örn. Docker kullanılmıyor,
+  // Gateway doğrudan yerel Python ile çalıştırılıyor ve kontrol
+  // sunucusu her nedense kapalıysa), YEDEK PLAN olarak komut panoya
+  // kopyalanır - buton her koşulda faydalı bir şey yapar.
+  const KONTROL_URL = "http://localhost:8766";
+  const SIMULATOR_KOMUTU = "python3 simulator/simulator.py";
+
+  async function simulatorBaslatTiklandi() {
+    const btn = document.getElementById('simulator-btn');
+    const eskiMetin = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Başlatılıyor...';
+
+    try {
+      const yanit = await fetch(`${KONTROL_URL}/simulator/baslat`, { method: 'POST' });
+      if (!yanit.ok) throw new Error('sunucu hatası');
+      const veri = await yanit.json();
+
+      btn.classList.add('kopyalandi');
+      if (veri.durum === 'baslatildi') {
+        btn.innerHTML = '✓ Simülatör Başlatıldı';
+      } else if (veri.durum === 'zaten_calisiyor') {
+        btn.innerHTML = '✓ Simülatör Zaten Çalışıyor';
+      } else {
+        throw new Error('beklenmeyen yanıt');
+      }
+    } catch (err) {
+      // Kontrol sunucusuna ulaşılamadı - yedek plan: komutu panoya kopyala
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(SIMULATOR_KOMUTU).catch(() => {});
+      }
+      btn.innerHTML = `⚠ Otomatik başlatılamadı - komut kopyalandı`;
+    }
+
+    btn.disabled = false;
+    setTimeout(() => {
+      btn.classList.remove('kopyalandi');
+      btn.innerHTML = eskiMetin;
+    }, 4000);
+  }
+
   function riskRengi(skor) {
     if (skor >= 0.7) return '#e5484d';
     if (skor >= 0.3) return '#f0b429';
@@ -365,9 +440,9 @@
     return bolgeler.filter(b => b.durum === aktifFiltre);
   }
 
-  function durumGonder(konum, yeniDurum) {
+  function durumGonder(bolgeId, yeniDurum) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ tip: "durum_guncelleme", konum, durum: yeniDurum }));
+    ws.send(JSON.stringify({ tip: "durum_guncelleme", bolge_id: bolgeId, durum: yeniDurum }));
   }
 
   function tabloyuCiz() {
@@ -384,12 +459,11 @@
     govde.innerHTML = gosterilecekler.map((bolge) => {
       const renk = riskRengi(bolge.oncelik_skoru);
       const konumStr = `${bolge.konum.lat.toFixed(4)}, ${bolge.konum.lon.toFixed(4)}`;
-      const konumJson = JSON.stringify(bolge.konum).replace(/"/g, '&quot;');
 
       const eylemButonlari = Object.entries(DURUM_ETIKETLERI).map(([anahtar, etiket]) => `
         <button class="eylem-btn ${bolge.durum === anahtar ? 'aktif-durum' : ''}"
                 style="${bolge.durum === anahtar ? `color:${renk}` : ''}"
-                onclick='durumGonder(${konumJson}, "${anahtar}")'>
+                onclick='durumGonder("${bolge.bolge_id}", "${anahtar}")'>
           ${etiket}
         </button>
       `).join('');
