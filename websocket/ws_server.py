@@ -27,6 +27,7 @@ WS_PORT = 8765
 _baglantilar = set()
 _loop = None  # WebSocket sunucusunun çalıştığı asyncio event loop
 _mesaj_callback = None  # istemciden mesaj geldiğinde çağrılacak fonksiyon
+_son_mesaj = None  # en son yayınlanan mesaj (yeni bağlanan istemciye hemen gönderilir)
 
 
 def mesaj_dinleyicisi_ayarla(callback):
@@ -44,6 +45,18 @@ async def _handler(websocket):
     istemciden gelen mesajları dinler."""
     _baglantilar.add(websocket)
     print(f"[WebSocket] Yeni istemci bağlandı. Toplam: {len(_baglantilar)}")
+
+    # Yeni bağlanan istemci, bir sonraki sensör verisini beklemek zorunda
+    # kalmasın diye, sistemde zaten bilinen EN SON durum hemen gönderilir.
+    # Böylece sayfa yeni açıldığında (henüz yeni veri gelmemiş olsa bile)
+    # mevcut bölgeler anında görünür.
+    if _son_mesaj is not None:
+        try:
+            await websocket.send(json.dumps(_son_mesaj, ensure_ascii=False))
+        except websockets.exceptions.ConnectionClosed:
+            _baglantilar.discard(websocket)
+            return
+
     try:
         async for ham_mesaj in websocket:
             if _mesaj_callback is not None:
@@ -58,6 +71,9 @@ async def _handler(websocket):
 
 
 async def _yayinla_async(mesaj: dict):
+    global _son_mesaj
+    _son_mesaj = mesaj  # yeni bağlanacak istemciler için önbelleğe al
+
     if not _baglantilar:
         return
     veri = json.dumps(mesaj, ensure_ascii=False)

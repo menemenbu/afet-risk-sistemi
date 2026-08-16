@@ -381,8 +381,14 @@ def gateway_baslat():
     global havuz
 
     vt = Veritabani(DB_DOSYA_YOLU)
+    # Her Gateway başlangıcı "temiz bir oturum" sayılır - önceki
+    # çalıştırmadan (örn. Docker kapatılıp tekrar açılmadan önceki)
+    # kayıtlar bu oturuma taşınmaz. Docker'da `docker compose down` ile
+    # kapatılıp `up` ile tekrar açıldığında, bir önceki oturumun tüm
+    # verileri burada silinmiş olur.
+    vt.tamamen_temizle()
     havuz = BolgeHavuzu(veritabani=vt)
-    print(f"Veritabanı hazır: {DB_DOSYA_YOLU}")
+    print(f"Veritabanı hazır (yeni oturum - önceki kayıtlar temizlendi): {DB_DOSYA_YOLU}")
 
     ws_server.baslat()
     ws_server.mesaj_dinleyicisi_ayarla(ws_mesaj_geldi)

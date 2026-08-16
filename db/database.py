@@ -128,6 +128,24 @@ class Veritabani:
         self.baglanti.execute("DELETE FROM bolgeler")
         self.baglanti.commit()
 
+    def tamamen_temizle(self):
+        """
+        Veritabanındaki TÜM kayıtları siler (ham_kayitlar dahil) - şema/
+        tablolar kalır, sadece veri temizlenir. Gateway her başladığında
+        bunu çağırır, böylece her çalıştırma "temiz bir oturum" (session)
+        gibi davranır: önceki çalıştırmadan (örn. Docker kapatılıp tekrar
+        açılmadan önceki) kayıtlar bir sonraki oturuma taşınmaz.
+
+        Not: Dosyayı silmek yerine içeriğini temizlemeyi tercih ediyoruz -
+        Docker'da tek dosya bind-mount'ları, container içinden dosyanın
+        silinip yeniden oluşturulmasıyla güvenilmez şekilde çalışabiliyor.
+        İçerik temizleme, dosya/inode aynı kaldığı için bu sorunu önler.
+        """
+        self.baglanti.execute("DELETE FROM bolge_kayitlar")
+        self.baglanti.execute("DELETE FROM bolgeler")
+        self.baglanti.execute("DELETE FROM ham_kayitlar")
+        self.baglanti.commit()
+
     def kapat(self):
         self.baglanti.close()
 
